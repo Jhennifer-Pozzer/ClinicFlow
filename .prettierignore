@@ -1,0 +1,9 @@
+.next
+.clinicflow-test
+src/generated
+next-env.d.ts
+pnpm-lock.yaml
+coverage
+playwright-report
+test-results
+

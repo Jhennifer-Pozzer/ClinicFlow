@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: Geist;
+  src: url("/fonts/geist-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --color-primary: #2563eb;
+  --color-navy: #1e3a8a;
+  --color-teal-accent: #14b8a6;
+  --color-ink: #0f172a;
+  --color-muted: #475569;
+  --color-border: #e2e8f0;
+  --color-surface: #f8fafc;
+  --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.035);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: Geist, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}

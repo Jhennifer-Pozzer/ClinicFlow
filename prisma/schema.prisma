@@ -1,0 +1,311 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  RECEPTIONIST
+  PROFESSIONAL
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentEvent {
+  CREATED
+  UPDATED
+  RESCHEDULED
+  STATUS_CHANGED
+}
+
+enum TransactionType {
+  RECEIVABLE
+  PAYABLE
+}
+
+enum TransactionStatus {
+  PENDING
+  SETTLED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  PIX
+  CASH
+  CARD
+  TRANSFER
+}
+
+model Organization {
+  id             String                     @id @default(uuid()) @db.Uuid
+  slug           String                     @unique
+  name           String
+  email          String?
+  phone          String?
+  timezone       String                     @default("America/Sao_Paulo")
+  openingHours   Json?
+  isDemo         Boolean                    @default(false)
+  createdAt      DateTime                   @default(now()) @db.Timestamptz
+  updatedAt      DateTime                   @updatedAt @db.Timestamptz
+  users          User[]
+  patients       Patient[]
+  professionals  Professional[]
+  specialties    Specialty[]
+  services       Service[]
+  availabilities ProfessionalAvailability[]
+  appointments   Appointment[]
+  statusHistory  AppointmentStatusHistory[]
+  categories     FinancialCategory[]
+  transactions   FinancialTransaction[]
+  auditLogs      AuditLog[]
+  passwordResets PasswordResetToken[]
+}
+
+model User {
+  id             String                     @id @default(uuid()) @db.Uuid
+  organizationId String                     @db.Uuid
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  name           String
+  email          String                     @unique
+  passwordHash   String
+  role           Role
+  active         Boolean                    @default(true)
+  sessionVersion Int                        @default(0)
+  theme          String                     @default("system")
+  professional   Professional?
+  statusChanges  AppointmentStatusHistory[]
+  auditLogs      AuditLog[]
+  passwordReset  PasswordResetToken?
+  createdAt      DateTime                   @default(now()) @db.Timestamptz
+  updatedAt      DateTime                   @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id])
+}
+
+model Patient {
+  id                 String        @id @default(uuid()) @db.Uuid
+  organizationId     String        @db.Uuid
+  organization       Organization  @relation(fields: [organizationId], references: [id])
+  internalCode       String
+  name               String
+  birthDate          DateTime      @db.Date
+  phone              String?
+  email              String?
+  administrativeNote String?
+  archivedAt         DateTime?     @db.Timestamptz
+  createdAt          DateTime      @default(now()) @db.Timestamptz
+  updatedAt          DateTime      @updatedAt @db.Timestamptz
+  appointments       Appointment[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, internalCode])
+  @@index([organizationId, archivedAt, name])
+}
+
+model Specialty {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  name           String
+  active         Boolean        @default(true)
+  professionals  Professional[]
+  services       Service[]
+  createdAt      DateTime       @default(now()) @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, name])
+}
+
+model Professional {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  organizationId         String                     @db.Uuid
+  organization           Organization               @relation(fields: [organizationId], references: [id])
+  userId                 String?                    @db.Uuid
+  user                   User?                      @relation(fields: [organizationId, userId], references: [organizationId, id], onDelete: Restrict)
+  specialtyId            String                     @db.Uuid
+  specialty              Specialty                  @relation(fields: [organizationId, specialtyId], references: [organizationId, id])
+  name                   String
+  registration           String
+  email                  String?
+  phone                  String?
+  defaultDurationMinutes Int
+  active                 Boolean                    @default(true)
+  availability           ProfessionalAvailability[]
+  appointments           Appointment[]
+  createdAt              DateTime                   @default(now()) @db.Timestamptz
+  updatedAt              DateTime                   @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, userId])
+  @@unique([organizationId, registration])
+  @@index([organizationId, specialtyId])
+}
+
+model ProfessionalAvailability {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  professionalId String       @db.Uuid
+  professional   Professional @relation(fields: [organizationId, professionalId], references: [organizationId, id])
+  weekday        Int // 0 = domingo
+  startMinute    Int // Horário local na clínica
+  endMinute      Int
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+  updatedAt      DateTime     @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, professionalId, weekday, startMinute])
+}
+
+model Service {
+  id              String        @id @default(uuid()) @db.Uuid
+  organizationId  String        @db.Uuid
+  organization    Organization  @relation(fields: [organizationId], references: [id])
+  specialtyId     String        @db.Uuid
+  specialty       Specialty     @relation(fields: [organizationId, specialtyId], references: [organizationId, id])
+  name            String
+  description     String
+  durationMinutes Int
+  priceCents      Int
+  active          Boolean       @default(true)
+  appointments    Appointment[]
+  createdAt       DateTime      @default(now()) @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, specialtyId, name])
+}
+
+model Appointment {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  organizationId     String                     @db.Uuid
+  organization       Organization               @relation(fields: [organizationId], references: [id])
+  patientId          String                     @db.Uuid
+  patient            Patient                    @relation(fields: [organizationId, patientId], references: [organizationId, id])
+  professionalId     String                     @db.Uuid
+  professional       Professional               @relation(fields: [organizationId, professionalId], references: [organizationId, id])
+  serviceId          String                     @db.Uuid
+  service            Service                    @relation(fields: [organizationId, serviceId], references: [organizationId, id])
+  startsAt           DateTime                   @db.Timestamptz
+  endsAt             DateTime                   @db.Timestamptz
+  priceCents         Int
+  status             AppointmentStatus          @default(SCHEDULED)
+  revision           Int                        @default(0)
+  requestKey         String?                    @db.Uuid
+  requestFingerprint String?                    @db.Char(64)
+  history            AppointmentStatusHistory[]
+  transactions       FinancialTransaction[]
+  createdAt          DateTime                   @default(now()) @db.Timestamptz
+  updatedAt          DateTime                   @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, requestKey])
+  @@index([organizationId, startsAt, status])
+  @@index([organizationId, professionalId, startsAt])
+  @@index([organizationId, patientId, startsAt])
+  @@index([organizationId, serviceId, startsAt])
+}
+
+model AppointmentStatusHistory {
+  id               String             @id @default(uuid()) @db.Uuid
+  organizationId   String             @db.Uuid
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  appointmentId    String             @db.Uuid
+  appointment      Appointment        @relation(fields: [organizationId, appointmentId], references: [organizationId, id])
+  actorId          String?            @db.Uuid
+  actor            User?              @relation(fields: [organizationId, actorId], references: [organizationId, id], onDelete: Restrict)
+  fromStatus       AppointmentStatus?
+  toStatus         AppointmentStatus
+  event            AppointmentEvent   @default(STATUS_CHANGED)
+  previousStartsAt DateTime?          @db.Timestamptz
+  startsAt         DateTime?          @db.Timestamptz
+  createdAt        DateTime           @default(now()) @db.Timestamptz
+
+  @@index([organizationId, appointmentId, createdAt])
+}
+
+model FinancialCategory {
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String                 @db.Uuid
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  name           String
+  type           TransactionType
+  active         Boolean                @default(true)
+  transactions   FinancialTransaction[]
+  createdAt      DateTime               @default(now()) @db.Timestamptz
+  updatedAt      DateTime               @updatedAt @db.Timestamptz
+
+  @@unique([organizationId, id, type])
+  @@unique([organizationId, type, name])
+}
+
+model FinancialTransaction {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @db.Uuid
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  categoryId     String            @db.Uuid
+  category       FinancialCategory @relation(fields: [organizationId, categoryId, type], references: [organizationId, id, type])
+  appointmentId  String?           @db.Uuid
+  appointment    Appointment?      @relation(fields: [organizationId, appointmentId], references: [organizationId, id], onDelete: Restrict)
+  description    String
+  type           TransactionType
+  status         TransactionStatus @default(PENDING)
+  amountCents    Int
+  dueDate        DateTime          @db.Date
+  settledAt      DateTime?         @db.Timestamptz
+  paymentMethod  PaymentMethod?
+  createdAt      DateTime          @default(now()) @db.Timestamptz
+  updatedAt      DateTime          @updatedAt @db.Timestamptz
+
+  @@index([organizationId, status, dueDate])
+  @@index([organizationId, settledAt])
+  @@index([organizationId, appointmentId])
+}
+
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  actorId        String?      @db.Uuid
+  actor          User?        @relation(fields: [organizationId, actorId], references: [organizationId, id], onDelete: Restrict)
+  action         String
+  entity         String
+  entityId       String       @db.Uuid
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  @@index([organizationId, createdAt])
+}
+
+model PasswordResetToken {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [organizationId, userId], references: [organizationId, id])
+  tokenHash      String       @unique @db.Char(64)
+  sessionVersion Int
+  expiresAt      DateTime     @db.Timestamptz
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+
+  @@unique([organizationId, userId])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  key       String   @id @db.Char(64)
+  hits      Int
+  expiresAt DateTime @db.Timestamptz
+
+  @@index([expiresAt])
+}
